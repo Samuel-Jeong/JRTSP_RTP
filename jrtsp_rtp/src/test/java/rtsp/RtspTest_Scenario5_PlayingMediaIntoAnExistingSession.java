@@ -32,12 +32,19 @@ import org.jmagni.jrtsp.rtsp.Streamer;
 import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
 import org.jmagni.jrtsp.rtsp.netty.handler.RtspChannelHandler;
 import org.jmagni.jrtsp.session.SessionManager;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
 
 import static org.junit.Assert.*;
+
+
+
+
+
+
+
+
 
 /**
  * @implNote Test Scenario 1 : 14.5 Playing media into an existing session
@@ -166,7 +173,7 @@ public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
 
         // 3) Then
     }
-    
+
     public void audioSetup() throws Exception {
         // 1) Given
         /**
@@ -185,23 +192,18 @@ public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
                 "RTP/AVP;multicast;destination=127.0.0.1;port=" + clientAudioRtpPort + "-" + clientAudioRtcpPort
         );
         setup.headers().add(RtspHeaderNames.CSEQ, "2");
-        
+
         // 2) When
         sendHttpRequest(setup);
 
         // 3) Then
         List<Streamer> streamerList = NettyChannelManager.getInstance().getStreamerListByCallId(callId);
         assertNotNull(streamerList);
-        assertNotEquals(streamerList.size(), 1);
+        assertEquals(1, streamerList.size());
 
-        Streamer streamer = NettyChannelManager.getInstance().getStreamerByUri(uri);
-        assertNotNull(streamer);
-
-        sessionId = streamer.getSessionId();
-
-        assertEquals(uri, streamer.getUri());
-        assertEquals(clientAudioRtpPort, streamer.getRtpDestPort());
-        assertEquals(clientAudioRtcpPort, streamer.getRtcpDestPort());
+        for (Streamer streamer : streamerList) {
+            sessionId = streamer.getSessionId();
+        }
     }
 
     public void videoSetup() throws Exception {
@@ -229,23 +231,18 @@ public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
         // 3) Then
         List<Streamer> streamerList = NettyChannelManager.getInstance().getStreamerListByCallId(callId);
         assertNotNull(streamerList);
-        assertNotEquals(streamerList.size(), 2);
+        assertEquals(2, streamerList.size());
 
-        Streamer streamer = NettyChannelManager.getInstance().getStreamerByUri(uri);
-        assertNotNull(streamer);
-
-        sessionId = streamer.getSessionId();
-
-        assertEquals(uri, streamer.getUri());
-        assertEquals(clientVideoRtpPort, streamer.getRtpDestPort());
-        assertEquals(clientVideoRtcpPort, streamer.getRtcpDestPort());
+        for (Streamer streamer : streamerList) {
+            sessionId = streamer.getSessionId();
+        }
     }
 
     public void play() throws Exception {
         // 1) Given
         List<Streamer> streamerList = NettyChannelManager.getInstance().getStreamerListByCallId(callId);
         assertNotNull(streamerList);
-        assertNotEquals(streamerList.size(), 2);
+        assertEquals(2, streamerList.size());
 
         /**
          * C->A: PLAY rtsp://server.example.com/call_id_test_1 RTSP/1.0
@@ -259,28 +256,19 @@ public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
         );
 
         play.headers().add(RtspHeaderNames.CSEQ, 4);
-        play.headers().add(RtspHeaderNames.SESSION, NettyChannelManager.getInstance().getStreamerByUri(uri).getSessionId());
+        play.headers().add(RtspHeaderNames.SESSION, sessionId);
 
         // 2) When
         sendHttpRequest(play);
 
         // 3) Then
-        Streamer streamer = NettyChannelManager.getInstance().getStreamerByUri(uri);
-        assertNotNull(streamer);
-
-        assertEquals(uri, streamer.getUri());
-        assertEquals(0, (int) streamer.getStartTime());
-        assertEquals(0, (int) streamer.getEndTime());
-
-        //String curState = rtspUnit.getStateManager().getStateUnit(rtspUnit.getRtspStateUnitId()).getCurState();
-        //assertEquals(RtspState.PLAY, curState);
     }
 
     public void teardown() throws Exception {
         // 1) Given
         List<Streamer> streamerList = NettyChannelManager.getInstance().getStreamerListByCallId(callId);
         assertNotNull(streamerList);
-        assertNotEquals(streamerList.size(), 2);
+        assertEquals(2, streamerList.size());
 
         /**
          * C->A: TEARDOWN rtsp://server.example.com/call_id_test_1 RTSP/1.0
@@ -295,8 +283,6 @@ public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
         );
 
         teardown.headers().add(RtspHeaderNames.CSEQ, 5);
-
-        String sessionId = NettyChannelManager.getInstance().getStreamerByUri(uri).getSessionId();
         teardown.headers().add(RtspHeaderNames.SESSION, sessionId);
 
         // 2) When

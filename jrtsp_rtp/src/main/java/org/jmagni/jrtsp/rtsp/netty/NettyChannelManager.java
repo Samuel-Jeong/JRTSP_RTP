@@ -233,13 +233,13 @@ public class NettyChannelManager {
         rtspNettyChannel.stopStreaming(key);
     }
 
-    public Streamer getStreamerByUri(String videoUri) {
+    public List<Streamer> getStreamerListByUri(String videoUri) {
         return rtspNettyChannel.getCloneStreamerMap().values().stream().filter(
                 streamer -> {
                     if (streamer == null) { return false; }
                     return streamer.getUri().equals(videoUri);
                 }
-        ).findFirst().orElse(null);
+        ).collect(Collectors.toList());
     }
 
     public List<Streamer> getStreamerListByCallId(String callId) {

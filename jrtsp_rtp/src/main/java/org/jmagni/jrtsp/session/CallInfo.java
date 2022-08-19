@@ -21,9 +21,9 @@ public class CallInfo {
 
     private MediaInfo mediaInfo = null;
 
-    public CallInfo(String callId, String conferenceId, boolean isHost) {
-        this.callId = callId;
+    public CallInfo(String conferenceId, String callId, boolean isHost) {
         this.conferenceId = conferenceId;
+        this.callId = callId;
         this.isHost = isHost;
     }
 
