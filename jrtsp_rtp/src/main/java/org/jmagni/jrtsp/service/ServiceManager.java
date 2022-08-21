@@ -1,7 +1,13 @@
 package org.jmagni.jrtsp.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jmagni.jrtsp.config.UserConfig;
+import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
+import org.jmagni.jrtsp.service.monitor.HaHandler;
+import org.jmagni.jrtsp.service.scheduler.job.Job;
+import org.jmagni.jrtsp.service.scheduler.job.JobBuilder;
 import org.jmagni.jrtsp.service.scheduler.schedule.ScheduleManager;
+import org.jmagni.jrtsp.service.system.ResourceManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +24,8 @@ public class ServiceManager {
     private static final ServiceManager serviceManager = new ServiceManager(); // lazy initialization
 
     private final ScheduleManager scheduleManager = new ScheduleManager();
+
+    private ResourceManager resourceManager = null;
 
     public static final String MAIN_SCHEDULE_JOB = "MAIN";
     public static final String LONG_SESSION_REMOVE_SCHEDULE_JOB = "LONG_SESSION_REMOVE_JOB";
@@ -39,11 +47,60 @@ public class ServiceManager {
     }
 
     private boolean start () {
-        return false;
+        systemLock();
+
+        UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
+
+        resourceManager = new ResourceManager(
+                userConfig.getLocalRtcpPortMin(),
+                userConfig.getLocalRtcpPortMax()
+        );
+        resourceManager.initResource();
+
+        NettyChannelManager.getInstance().openRtspChannel(
+                userConfig.getLocalListenIp(),
+                userConfig.getLocalRtspListenPort()
+        );
+
+        if (scheduleManager.initJob(MAIN_SCHEDULE_JOB, 10, 10 * 2)) {
+            // FOR CHECKING the availability of this program
+            Job haHandleJob = new JobBuilder()
+                    .setScheduleManager(scheduleManager)
+                    .setName(HaHandler.class.getSimpleName())
+                    .setInitialDelay(0)
+                    .setInterval(DELAY)
+                    .setTimeUnit(TimeUnit.MILLISECONDS)
+                    .setPriority(5)
+                    .setTotalRunCount(1)
+                    .setIsLasted(true)
+                    .build();
+            HaHandler haHandler = new HaHandler(haHandleJob);
+            haHandler.init();
+            if (scheduleManager.startJob(MAIN_SCHEDULE_JOB, haHandler.getJob())) {
+                log.debug("[ServiceManager] [+RUN] HA Handler");
+            } else {
+                log.warn("[ServiceManager] [-RUN FAIL] HA Handler");
+                return false;
+            }
+        }
+
+        log.debug("| All services are opened.");
+        return true;
     }
     
     public void stop() {
-        
+        if (resourceManager != null) {
+            resourceManager.releaseResource();
+        }
+
+        NettyChannelManager.getInstance().deleteRtspChannel();
+
+        scheduleManager.stopAll(MAIN_SCHEDULE_JOB);
+
+        systemUnLock();
+
+        isQuit = true;
+        log.debug("| All services are closed.");
     }
 
     public void loop () {
@@ -60,6 +117,10 @@ public class ServiceManager {
                 log.warn("| ServiceManager.loop.InterruptedException", e);
             }
         }
+    }
+
+    public ResourceManager getResourceManager() {
+        return resourceManager;
     }
 
     private void systemLock () {

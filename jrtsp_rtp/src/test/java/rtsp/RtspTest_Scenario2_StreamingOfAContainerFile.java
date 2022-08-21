@@ -38,16 +38,15 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-
-
-
-
-
-
-
-
 /**
- * @implNote Test Scenario 1 : 14.5 Playing media into an existing session
+ * @implNote Test Scenario : 14.2 Streaming of a Container file
+ *    It is also possible that the presentation author may wish to prevent
+ *    selective retrieval of the streams by the client in order to preserve
+ *    the artistic effect of the combined media presentation. Similarly, in
+ *    such a tightly bound presentation, it is desirable to be able to
+ *    control all the streams via a single control message using an
+ *    aggregate URL.
+ *
  * @implSpec C : Client
  * @implSpec S : Server
  *
@@ -112,7 +111,7 @@ import static org.junit.Assert.*;
  *            Session: 0456804596
  */
 @Slf4j
-public class RtspTest_Scenario5_PlayingMediaIntoAnExistingSession {
+public class RtspTest_Scenario2_StreamingOfAContainerFile {
 
     private EmbeddedChannel ch = null;
 

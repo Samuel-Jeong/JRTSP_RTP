@@ -5,8 +5,6 @@ import org.jmagni.jrtsp.config.ConfigManager;
 import org.jmagni.jrtsp.rtsp.ResourceManager;
 import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
 import org.jmagni.jrtsp.service.AppInstance;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 @Slf4j
@@ -18,7 +16,7 @@ public class RtspTotalTest {
         instance.setInstanceId(1);
         instance.setConfigPath(System.getProperty("user.dir") + "/src/test/resources/config/");
 
-        log.info("class root: {}", RtspTest_Scenario5_PlayingMediaIntoAnExistingSession.class.getResource("/").getPath());
+        log.info("class root: {}", RtspTest_Scenario2_StreamingOfAContainerFile.class.getResource("/").getPath());
         log.info("instance.getConfigPath(): {}", instance.getConfigPath());
 
         ConfigManager configManager = new ConfigManager(instance.getConfigPath() + "user_conf.ini");
@@ -93,7 +91,7 @@ public class RtspTotalTest {
 
     @Test
     public void testAll() throws Exception {
-        RtspTest_Scenario5_PlayingMediaIntoAnExistingSession scenario5 = new RtspTest_Scenario5_PlayingMediaIntoAnExistingSession();
+        RtspTest_Scenario2_StreamingOfAContainerFile scenario5 = new RtspTest_Scenario2_StreamingOfAContainerFile();
         scenario5.testAll();
     }
 
