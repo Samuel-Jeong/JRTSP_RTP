@@ -47,8 +47,8 @@ public class Streamer {
     private double startTime = 0.0d;
     private double endTime = 0.0d;
 
-    private final String listenIp;
-    private final int listenPort;
+    private final String rtcpListenIp;
+    private final int rtcpListenPort;
 
     private String uri = null;
     private int congestionLevel = 0;
@@ -87,17 +87,17 @@ public class Streamer {
 
     private final byte TCP_RTP_MAGIC_NUMBER = 0X24;
 
-    public Streamer(MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp, String listenIp, int listenPort) {
+    public Streamer(MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp, String rtcpListenIp, int rtcpListenPort) {
         this.mediaType = mediaType;
         this.callId = callId;
         this.sessionId = sessionId;
         this.trackId = trackId;
         this.isTcp = isTcp;
-        this.listenIp = listenIp;
-        this.listenPort = listenPort;
+        this.rtcpListenIp = rtcpListenIp;
+        this.rtcpListenPort = rtcpListenPort;
 
-        log.debug("({}) Streamer({}) is created. (callId={}, trackId={}, listenIp={}, listenPort={})",
-                sessionId, mediaType.getName(), callId, trackId, listenIp, listenPort
+        log.debug("({}) Streamer({}) is created. (callId={}, trackId={}, rtcpListenIp={}, rtcpListenPort={})",
+                sessionId, mediaType.getName(), callId, trackId, rtcpListenIp, rtcpListenPort
         );
         log.warn("({}) Streamer's transport is [{}]", getKey(), isTcp? "TCP" : "UDP");
     }
@@ -213,12 +213,12 @@ public class Streamer {
         return sessionId;
     }
 
-    public String getListenIp() {
-        return listenIp;
+    public String getRtcpListenIp() {
+        return rtcpListenIp;
     }
 
-    public int getListenPort() {
-        return listenPort;
+    public int getRtcpListenPort() {
+        return rtcpListenPort;
     }
 
     public Channel getRtpDestChannel() {

@@ -2,12 +2,12 @@ package org.jmagni.jrtsp.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jmagni.jrtsp.config.UserConfig;
+import org.jmagni.jrtsp.rtsp.PortManager;
 import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
 import org.jmagni.jrtsp.service.monitor.HaHandler;
 import org.jmagni.jrtsp.service.scheduler.job.Job;
 import org.jmagni.jrtsp.service.scheduler.job.JobBuilder;
 import org.jmagni.jrtsp.service.scheduler.schedule.ScheduleManager;
-import org.jmagni.jrtsp.service.system.ResourceManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,8 +24,6 @@ public class ServiceManager {
     private static final ServiceManager serviceManager = new ServiceManager(); // lazy initialization
 
     private final ScheduleManager scheduleManager = new ScheduleManager();
-
-    private ResourceManager resourceManager = null;
 
     public static final String MAIN_SCHEDULE_JOB = "MAIN";
     public static final String LONG_SESSION_REMOVE_SCHEDULE_JOB = "LONG_SESSION_REMOVE_JOB";
@@ -51,11 +49,7 @@ public class ServiceManager {
 
         UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
 
-        resourceManager = new ResourceManager(
-                userConfig.getLocalRtcpPortMin(),
-                userConfig.getLocalRtcpPortMax()
-        );
-        resourceManager.initResource();
+        PortManager.getInstance().initResource();
 
         NettyChannelManager.getInstance().openRtspChannel(
                 userConfig.getLocalListenIp(),
@@ -89,9 +83,7 @@ public class ServiceManager {
     }
     
     public void stop() {
-        if (resourceManager != null) {
-            resourceManager.releaseResource();
-        }
+        PortManager.getInstance().releaseResource();
 
         NettyChannelManager.getInstance().deleteRtspChannel();
 
@@ -117,10 +109,6 @@ public class ServiceManager {
                 log.warn("| ServiceManager.loop.InterruptedException", e);
             }
         }
-    }
-
-    public ResourceManager getResourceManager() {
-        return resourceManager;
     }
 
     private void systemLock () {

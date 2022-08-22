@@ -111,7 +111,6 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
                 else {
                     logger.warn("({}) () < Unknown method: {}", name, req);
                     sendFailResponse(name, ctx, req, res, null, RtspResponseStatuses.METHOD_NOT_ALLOWED);
-                    //ctx.write(res).addListener(ChannelFutureListener.CLOSE);
                 }
             }
         } catch (Exception e) {
@@ -143,7 +142,7 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
         logger.debug("({}) () < DESCRIBE\n{}", name, req);
 
         /**
-         * DESCRIBE rtsp://airtc.uangel.com:8550/0cdef1795485d46babb5b505902828f7@192.168.5.222 RTSP/1.0
+         * DESCRIBE rtsp://[domain name]:[port]/0cdef1795485d46babb5b505902828f7@192.168.5.222 RTSP/1.0
          * CSeq: 3
          * User-Agent: LibVLC/3.0.16 (LIVE555 Streaming Media v2016.11.28)
          * Accept: application/sdp
@@ -246,7 +245,7 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
         /**
          * [UDP]
          *
-         * SETUP rtsp://airtc.uangel.com:8550/938507ed543ac177f61164e9ecb4c50b@192.168.5.222 RTSP/1.0
+         * SETUP rtsp://[domain name]:[port]/938507ed543ac177f61164e9ecb4c50b@192.168.5.222 RTSP/1.0
          * CSeq: 0
          * Transport: RTP/AVP;unicast;client_port=9406-9407
          */
@@ -357,43 +356,7 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
     }
 
     private void setupUdp(ChannelHandlerContext ctx, DefaultHttpRequest req, DefaultFullHttpResponse res, String transportHeaderContent, Streamer streamer) {
-        String rtpDestPortString = null;
-        if (transportHeaderContent.contains(RtspHeaderValues.CLIENT_PORT)) {
-            rtpDestPortString = getTransportAttribute(transportHeaderContent, RtspHeaderValues.CLIENT_PORT);
-        } else if (transportHeaderContent.contains(RtspHeaderValues.PORT)) {
-            rtpDestPortString = getTransportAttribute(transportHeaderContent, RtspHeaderValues.PORT);
-        }
-        if (rtpDestPortString == null) {
-            logger.warn("({}) ({}) Fail to parse rtp destination port. (transportHeaderContent={})",
-                    name, streamer.getKey(), transportHeaderContent
-            );
-            sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
-            return;
-        }
-
-        if (rtpDestPortString.contains("-")) {
-            String rtcpDesPortString = rtpDestPortString.substring(
-                    rtpDestPortString.lastIndexOf("-") + 1
-            );
-            int rtcpDestPort = Integer.parseInt(rtcpDesPortString);
-            if (rtcpDestPort <= 0) {
-                logger.warn("({}) ({}) Fail to parse rtcp destination port. (transportHeaderContent={})",
-                        name, streamer.getKey(), transportHeaderContent
-                );
-                sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
-                return;
-            } else {
-                streamer.setRtcpDestPort(rtcpDestPort);
-            }
-            rtpDestPortString = rtpDestPortString.substring(0, rtpDestPortString.lastIndexOf("-"));
-
-            int rtpDestPort = Integer.parseInt(rtpDestPortString);
-            if (rtpDestPort <= 0) {
-                sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
-                return;
-            }
-            streamer.setRtpDestPort(rtpDestPort);
-        }
+        if (getTransportInfo(ctx, req, res, transportHeaderContent, streamer)) { return; }
 
         res.headers().add(
                 RtspHeaderNames.TRANSPORT,
@@ -406,6 +369,50 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
         logger.debug("({}) ({}) Success to setup the udp stream. (rtpDestIp={}, rtpDestPort={}, rtcpDestPort={})",
                 name, streamer.getKey(), streamer.getDestIp(), streamer.getRtpDestPort(), streamer.getRtcpDestPort()
         );
+    }
+
+    private boolean getTransportInfo(ChannelHandlerContext ctx, DefaultHttpRequest req, DefaultFullHttpResponse res, String transportHeaderContent, Streamer streamer) {
+        String rtpDestPortString = null;
+        if (transportHeaderContent.contains(RtspHeaderValues.CLIENT_PORT)) {
+            rtpDestPortString = getTransportAttribute(transportHeaderContent, RtspHeaderValues.CLIENT_PORT);
+        } else if (transportHeaderContent.contains(RtspHeaderValues.PORT)) {
+            rtpDestPortString = getTransportAttribute(transportHeaderContent, RtspHeaderValues.PORT);
+        }
+        if (rtpDestPortString == null) {
+            logger.warn("({}) ({}) Fail to parse rtp destination port. (transportHeaderContent={})",
+                    name, streamer.getKey(), transportHeaderContent
+            );
+            sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
+            return true;
+        }
+
+        if (rtpDestPortString.contains("-")) {
+            String rtcpDesPortString = rtpDestPortString.substring(
+                    rtpDestPortString.lastIndexOf("-") + 1
+            );
+            int rtcpDestPort = Integer.parseInt(rtcpDesPortString);
+            if (rtcpDestPort <= 0) {
+                logger.warn("({}) ({}) Fail to parse rtcp destination port. (transportHeaderContent={})",
+                        name, streamer.getKey(), transportHeaderContent
+                );
+                sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
+                return true;
+            } else {
+                streamer.setRtcpDestPort(rtcpDestPort);
+            }
+            rtpDestPortString = rtpDestPortString.substring(0, rtpDestPortString.lastIndexOf("-"));
+
+            int rtpDestPort = Integer.parseInt(rtpDestPortString);
+            if (rtpDestPort <= 0) {
+                logger.warn("({}) ({}) Fail to parse rtp destination port. (transportHeaderContent={})",
+                        name, streamer.getKey(), transportHeaderContent
+                );
+                sendFailResponse(name, ctx, req, res, streamer.getSessionId(), RtspResponseStatuses.NOT_ACCEPTABLE);
+                return true;
+            }
+            streamer.setRtpDestPort(rtpDestPort);
+        }
+        return false;
     }
 
     private void setupTcp(ChannelHandlerContext ctx, DefaultHttpRequest req, DefaultFullHttpResponse res, String transportHeaderContent, Streamer streamer) {

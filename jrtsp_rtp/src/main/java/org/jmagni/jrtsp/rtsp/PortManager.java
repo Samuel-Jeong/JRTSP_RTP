@@ -8,42 +8,42 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * @class public class ResourceManager
- * @brief ResourceManager class
+ * @class public class PortManager
+ * @brief PortManager class
  */
-public class ResourceManager {
+public class PortManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(ResourceManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(PortManager.class);
 
-    private static ResourceManager resourceManager = null;
+    private static PortManager portManager = null;
     private final ConcurrentLinkedQueue<Integer> channelQueues;
 
-    private int localRtpPortMin = 0;
-    private int localRtpPortMax = 0;
+    private int localPortMin = 0;
+    private int localPortMax = 0;
     private final int portGap = 2;
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    public ResourceManager( ) {
+    public PortManager( ) {
         channelQueues = new ConcurrentLinkedQueue<>();
     }
 
-    public static ResourceManager getInstance ( ) {
-        if (resourceManager == null) {
-            resourceManager = new ResourceManager();
+    public static PortManager getInstance ( ) {
+        if (portManager == null) {
+            portManager = new PortManager();
         }
 
-        return resourceManager;
+        return portManager;
     }
 
     ////////////////////////////////////////////////////////////////////////////////
 
     public void initResource() {
         UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
-        localRtpPortMin = userConfig.getLocalRtcpPortMin();
-        localRtpPortMax = userConfig.getLocalRtcpPortMax();
+        localPortMin = userConfig.getLocalRtcpPortMin();
+        localPortMax = userConfig.getLocalRtcpPortMax();
 
-        for (int idx = localRtpPortMin; idx <= localRtpPortMax; idx += portGap) {
+        for (int idx = localPortMin; idx <= localPortMax; idx += portGap) {
             try {
                 channelQueues.add(idx);
             } catch (Exception e) {
@@ -53,14 +53,14 @@ public class ResourceManager {
         }
 
         logger.info("Ready to RTP port resource in Queue. (port range: {} - {}, gap={})",
-                localRtpPortMin, localRtpPortMax, portGap
+                localPortMin, localPortMax, portGap
         );
     }
 
     public void releaseResource () {
         channelQueues.clear();
         logger.info("Release RTP port resource in Queue. (port range: {} - {}, gap={})",
-                localRtpPortMin, localRtpPortMax, portGap
+                localPortMin, localPortMax, portGap
         );
     }
 

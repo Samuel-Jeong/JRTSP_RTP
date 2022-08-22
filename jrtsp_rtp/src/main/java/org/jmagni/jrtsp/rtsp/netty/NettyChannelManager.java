@@ -96,22 +96,22 @@ public class NettyChannelManager {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    public RtcpNettyChannel openRtcpChannel(String rtspUnitId, String ip, int port) {
+    public RtcpNettyChannel openRtcpChannel(String streamerKey, String ip, int port) {
         try {
             rtcpChannelMapLock.lock();
 
-            if (rtcpChannelMap.get(rtspUnitId) != null) {
-                logger.trace("| ({}) Fail to add the rtcp channel. Key is duplicated.", rtspUnitId);
+            if (rtcpChannelMap.get(streamerKey) != null) {
+                logger.trace("| ({}) Fail to add the rtcp channel. Key is duplicated.", streamerKey);
                 return null;
             }
 
-            /*int port = ResourceManager.getInstance().takePort();
+            /*int port = PortManager.getInstance().takePort();
             if (port == -1) {
                 logger.warn("| Fail to add the channel. Port is full. (key={})", key);
                 return false;
             }*/
 
-            RtcpNettyChannel rtcpNettyChannel = new RtcpNettyChannel(rtspUnitId, ip, port);
+            RtcpNettyChannel rtcpNettyChannel = new RtcpNettyChannel(streamerKey, ip, port);
             rtcpNettyChannel.run(ip, port);
 
             // 메시지 수신용 채널 open
@@ -123,39 +123,39 @@ public class NettyChannelManager {
             if (channel == null) {
                 rtcpNettyChannel.closeChannel();
                 rtcpNettyChannel.stop();
-                logger.warn("| ({}) Fail to add the rtcp channel.", rtspUnitId);
+                logger.warn("| ({}) Fail to add the rtcp channel.", streamerKey);
                 return null;
             }
 
-            rtcpChannelMap.putIfAbsent(rtspUnitId, rtcpNettyChannel);
-            logger.debug("| ({}) Success to add rtcp channel.", rtspUnitId);
+            rtcpChannelMap.putIfAbsent(streamerKey, rtcpNettyChannel);
+            logger.debug("| ({}) Success to add rtcp channel.", streamerKey);
             return rtcpNettyChannel;
         } catch (Exception e) {
-            logger.warn("| ({}) Fail to add rtcp channel (ip={}, port={}).", rtspUnitId, ip, port, e);
+            logger.warn("| ({}) Fail to add rtcp channel (ip={}, port={}).", streamerKey, ip, port, e);
             return null;
         } finally {
             rtcpChannelMapLock.unlock();
         }
     }
 
-    public void deleteRtcpChannel(String rtspUnitId) {
+    public void deleteRtcpChannel(String streamerKey) {
         try {
             rtcpChannelMapLock.lock();
 
             if (!rtcpChannelMap.isEmpty()) {
-                RtcpNettyChannel rtcpNettyChannel = rtcpChannelMap.get(rtspUnitId);
+                RtcpNettyChannel rtcpNettyChannel = rtcpChannelMap.get(streamerKey);
                 if (rtcpNettyChannel == null) {
                     return;
                 }
 
                 rtcpNettyChannel.closeChannel();
                 rtcpNettyChannel.stop();
-                rtcpChannelMap.remove(rtspUnitId);
+                rtcpChannelMap.remove(streamerKey);
 
-                logger.debug("| ({}) Success to close the rtcp channel.", rtspUnitId);
+                logger.debug("| ({}) Success to close the rtcp channel.", streamerKey);
             }
         } catch (Exception e) {
-            logger.warn("| ({}) Fail to close the rtcp channel.", rtspUnitId, e);
+            logger.warn("| ({}) Fail to close the rtcp channel.", streamerKey, e);
         } finally {
             rtcpChannelMapLock.unlock();
         }
@@ -174,11 +174,11 @@ public class NettyChannelManager {
         }
     }
 
-    public RtcpNettyChannel getRtcpChannel(String rtspUnitId) {
+    public RtcpNettyChannel getRtcpChannel(String streamerKey) {
         try {
             rtcpChannelMapLock.lock();
 
-            return rtcpChannelMap.get(rtspUnitId);
+            return rtcpChannelMap.get(streamerKey);
         } catch (Exception e) {
             return null;
         } finally {

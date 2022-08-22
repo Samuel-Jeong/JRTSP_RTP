@@ -2,10 +2,12 @@ package rtsp;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jmagni.jrtsp.config.ConfigManager;
-import org.jmagni.jrtsp.rtsp.ResourceManager;
+import org.jmagni.jrtsp.rtsp.PortManager;
 import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
 import org.jmagni.jrtsp.service.AppInstance;
 import org.junit.Test;
+
+import javax.sound.sampled.Port;
 
 @Slf4j
 public class RtspTotalTest {
@@ -22,7 +24,7 @@ public class RtspTotalTest {
         ConfigManager configManager = new ConfigManager(instance.getConfigPath() + "user_conf.ini");
         instance.setConfigManager(configManager);
 
-        ResourceManager.getInstance().initResource();
+        PortManager.getInstance().initResource();
 
         NettyChannelManager.getInstance().openRtspChannel(
                 AppInstance.getInstance().getConfigManager().getUserConfig().getLocalListenIp(),
@@ -32,6 +34,7 @@ public class RtspTotalTest {
 
     public static void close() {
         NettyChannelManager.getInstance().deleteRtspChannel();
+        PortManager.getInstance().releaseResource();
     }
     //////////////////////////////////////////////////////////////////////////////
 

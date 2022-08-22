@@ -22,7 +22,7 @@ public class RtcpNettyChannel { // > UDP
 
     private static final Logger logger = LoggerFactory.getLogger(RtcpNettyChannel.class);
 
-    private final String rtspUnitId;
+    private final String streamerKey;
     private final String listenIp;
     private final int listenPort;
 
@@ -33,8 +33,8 @@ public class RtcpNettyChannel { // > UDP
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    public RtcpNettyChannel(String rtspUnitId, String ip, int port) {
-        this.rtspUnitId = rtspUnitId;
+    public RtcpNettyChannel(String streamerKey, String ip, int port) {
+        this.streamerKey = streamerKey;
         this.listenIp = ip;
         this.listenPort = port;
     }

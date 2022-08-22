@@ -9,6 +9,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.rtsp.RtspDecoder;
 import io.netty.handler.codec.rtsp.RtspEncoder;
 import org.jmagni.jrtsp.config.UserConfig;
+import org.jmagni.jrtsp.rtsp.PortManager;
 import org.jmagni.jrtsp.rtsp.Streamer;
 import org.jmagni.jrtsp.rtsp.base.MediaType;
 import org.jmagni.jrtsp.rtsp.netty.handler.RtspChannelHandler;
@@ -42,8 +43,8 @@ public class RtspNettyChannel { // > TCP
 
     /* Streamer Map */
     /* Key: To MDN, value: Streamer */
-    private final HashMap<String, Streamer> messageSenderMap = new HashMap<>();
-    private final ReentrantLock messageSenderLock = new ReentrantLock();
+    private final HashMap<String, Streamer> streamerMap = new HashMap<>();
+    private final ReentrantLock streamerMapLock = new ReentrantLock();
 
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,10 +153,10 @@ public class RtspNettyChannel { // > TCP
 
     public Streamer addStreamer (MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp) {
         try {
-            messageSenderLock.lock();
+            streamerMapLock.lock();
 
             String key = (trackId != null && !trackId.isEmpty()) ? callId + ":" + trackId : callId;
-            if (messageSenderMap.get(key) != null) {
+            if (streamerMap.get(key) != null) {
                 logger.warn("Streamer is already exist. (key={})", sessionId);
                 return null;
             }
@@ -166,46 +167,46 @@ public class RtspNettyChannel { // > TCP
                     sessionId,
                     trackId,
                     isTcp,
-                    listenIp, listenPort
+                    listenIp, PortManager.getInstance().takePort()
             );
 
             if (!streamer.isTcp()) {
                 streamer.init();
             }
 
-            messageSenderMap.putIfAbsent(streamer.getKey(), streamer);
+            streamerMap.putIfAbsent(streamer.getKey(), streamer);
             return streamer;
         } catch (Exception e) {
             logger.warn("Fail to add streamer (callId={}, sessionId={}, trackId={})", callId, sessionId, trackId, e);
             return null;
         } finally {
-            messageSenderLock.unlock();
+            streamerMapLock.unlock();
         }
     }
 
     public void deleteStreamer (String key) {
         try {
-            messageSenderLock.lock();
+            streamerMapLock.lock();
 
-            Streamer streamer = messageSenderMap.get(key);
+            Streamer streamer = streamerMap.get(key);
             if (streamer == null) {
                 logger.warn("Streamer is null. Fail to delete the Streamer. (key={})", key);
                 return;
             }
 
             streamer.finish();
-            messageSenderMap.remove(key);
+            streamerMap.remove(key);
             logger.debug("Streamer is deleted. (key={})", key);
         } catch (Exception e) {
             logger.warn("Fail to delete the Streamer. (key={})", key, e);
         } finally {
-            messageSenderLock.unlock();
+            streamerMapLock.unlock();
         }
     }
 
     public void deleteAllStreamers () {
         try {
-            messageSenderLock.lock();
+            streamerMapLock.lock();
 
             for (Map.Entry<String, Streamer> entry : getCloneStreamerMap().entrySet()) {
                 String key = entry.getKey();
@@ -219,12 +220,12 @@ public class RtspNettyChannel { // > TCP
                 }
 
                 streamer.finish();
-                messageSenderMap.remove(key);
+                streamerMap.remove(key);
             }
         } catch (Exception e) {
             logger.warn("Fail to delete all the Streamers.", e);
         } finally {
-            messageSenderLock.unlock();
+            streamerMapLock.unlock();
         }
     }
 
@@ -232,14 +233,14 @@ public class RtspNettyChannel { // > TCP
         HashMap<String, Streamer> cloneMap;
 
         try {
-            messageSenderLock.lock();
+            streamerMapLock.lock();
 
-            cloneMap = (HashMap<String, Streamer>) messageSenderMap.clone();
+            cloneMap = (HashMap<String, Streamer>) streamerMap.clone();
         } catch (Exception e) {
             logger.warn("Fail to clone the message sender map.");
-            cloneMap = messageSenderMap;
+            cloneMap = streamerMap;
         } finally {
-            messageSenderLock.unlock();
+            streamerMapLock.unlock();
         }
 
         return cloneMap;
@@ -252,7 +253,7 @@ public class RtspNettyChannel { // > TCP
      * @return 성공 시 Streamer 객체, 실패 시 null 반환
      */
     public Streamer getStreamer (String key) {
-        return messageSenderMap.get(key);
+        return streamerMap.get(key);
     }
 
     public void startStreaming(String key) {
