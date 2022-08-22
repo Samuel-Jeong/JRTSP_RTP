@@ -24,7 +24,7 @@ public class RtspTotalTest {
         ConfigManager configManager = new ConfigManager(instance.getConfigPath() + "user_conf.ini");
         instance.setConfigManager(configManager);
 
-        PortManager.getInstance().initResource();
+        PortManager.getInstance().initResource(configManager.getUserConfig().getLocalRtcpPortMin(), configManager.getUserConfig().getLocalRtcpPortMax());
 
         NettyChannelManager.getInstance().openRtspChannel(
                 AppInstance.getInstance().getConfigManager().getUserConfig().getLocalListenIp(),

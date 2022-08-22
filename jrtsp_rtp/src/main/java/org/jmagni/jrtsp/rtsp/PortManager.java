@@ -38,10 +38,9 @@ public class PortManager {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    public void initResource() {
-        UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
-        localPortMin = userConfig.getLocalRtcpPortMin();
-        localPortMax = userConfig.getLocalRtcpPortMax();
+    public void initResource(int localPortMin, int localPortMax) {
+        this.localPortMin = localPortMin;
+        this.localPortMax = localPortMax;
 
         for (int idx = localPortMin; idx <= localPortMax; idx += portGap) {
             try {

@@ -49,7 +49,7 @@ public class ServiceManager {
 
         UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
 
-        PortManager.getInstance().initResource();
+        PortManager.getInstance().initResource(userConfig.getLocalRtcpPortMin(), userConfig.getLocalRtcpPortMax());
 
         NettyChannelManager.getInstance().openRtspChannel(
                 userConfig.getLocalListenIp(),
