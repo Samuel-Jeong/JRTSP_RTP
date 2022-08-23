@@ -1,7 +1,5 @@
 package org.jmagni.jrtsp.rtsp;
 
-import org.jmagni.jrtsp.config.UserConfig;
-import org.jmagni.jrtsp.service.AppInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -169,11 +169,6 @@ public class RtspNettyChannel { // > TCP
                     isTcp,
                     listenIp, PortManager.getInstance().takePort()
             );
-
-            if (!streamer.isTcp()) {
-                streamer.init();
-            }
-
             streamerMap.putIfAbsent(streamer.getKey(), streamer);
             return streamer;
         } catch (Exception e) {
@@ -194,7 +189,7 @@ public class RtspNettyChannel { // > TCP
                 return;
             }
 
-            streamer.finish();
+            streamer.close();
             streamerMap.remove(key);
             logger.debug("Streamer is deleted. (key={})", key);
         } catch (Exception e) {
@@ -219,7 +214,7 @@ public class RtspNettyChannel { // > TCP
                     continue;
                 }
 
-                streamer.finish();
+                streamer.close();
                 streamerMap.remove(key);
             }
         } catch (Exception e) {

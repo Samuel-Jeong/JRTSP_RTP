@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.Random;
 
 import static org.jmagni.jrtsp.rtsp.Streamer.*;
+import static org.jmagni.jrtsp.rtsp.stream.rtp.base.RtpMeta.*;
 
 /**
  * @class public class RtspChannelHandler extends ChannelInboundHandlerAdapter
@@ -437,23 +438,23 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
     private void saveStreamerToContext(ChannelHandlerContext ctx, Streamer streamer) {
         if (streamer.getTrackId().equals(AUDIO_TRACK_ID)) {
             audioContextStreamer = streamer;
-            audioContextStreamer.setChannelContext(ctx);
+            audioContextStreamer.setRtspChannelContext(ctx);
         } else if (streamer.getTrackId().equals(VIDEO_TRACK_ID)) {
             videoContextStreamer = streamer;
-            videoContextStreamer.setChannelContext(ctx);
+            videoContextStreamer.setRtspChannelContext(ctx);
         }
     }
 
     private void releaseStreamerFromContext(String key) {
         if (audioContextStreamer != null && audioContextStreamer.getKey().equals(key)) {
-            audioContextStreamer.setChannelContext(null);
+            audioContextStreamer.setRtspChannelContext(null);
             audioContextStreamer.stop();
             logger.debug("({}) AudioContextStreamer is removed.", audioContextStreamer.getKey());
             audioContextStreamer = null;
         }
 
         if (videoContextStreamer != null && videoContextStreamer.getKey().equals(key)) {
-            videoContextStreamer.setChannelContext(null);
+            videoContextStreamer.setRtspChannelContext(null);
             videoContextStreamer.stop();
             logger.debug("({}) VideoContextStreamer is removed.", videoContextStreamer.getKey());
             videoContextStreamer = null;
@@ -568,33 +569,6 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
                     return;
                 }
                 logger.debug("({}) Current sessionId is [{}].", name, curSessionId);
-
-                // NPT PARSING
-                double npt1 = 0;
-                double npt2 = 0;
-                if (req.headers().get(RtspHeaderNames.RANGE) != null) {
-                    // npt parsing
-                    String nptString = req.headers().get(RtspHeaderNames.RANGE);
-                    String nptString1 = nptString.substring(nptString.lastIndexOf("=") + 1, nptString.lastIndexOf("-"));
-                    String nptString2 = null;
-                    if (!nptString.endsWith("-")) {
-                        nptString2 = nptString.substring(nptString.lastIndexOf("-") + 1);
-                    }
-
-                    npt1 = Double.parseDouble(nptString1);
-                    audioContextStreamer.setStartTime(npt1);
-                    videoContextStreamer.setStartTime(npt1);
-                    npt2 = 0;
-                    if (nptString2 != null && !nptString2.isEmpty()) {
-                        npt2 = Double.parseDouble(nptString2);
-                        audioContextStreamer.setEndTime(npt2);
-                        videoContextStreamer.setEndTime(npt2);
-                    }
-                }
-                logger.debug("({}) ({}) [< PLAY REQ] AUDIO RANGE: [{} ~ {}]", name, audioContextStreamer.getKey(), npt1, npt2);
-                logger.debug("({}) ({}) [< PLAY REQ] AUDIO URI: {}", name, audioContextStreamer.getKey(), audioContextStreamer.getUri());
-                logger.debug("({}) ({}) [< PLAY REQ] VIDEO RANGE: [{} ~ {}]", name, videoContextStreamer.getKey(), npt1, npt2);
-                logger.debug("({}) ({}) [< PLAY REQ] VIDEO URI: {}", name, videoContextStreamer.getKey(), videoContextStreamer.getUri());
 
                 // CHECK RTSP DESTINATION PORT
                 int audioDestPort = audioContextStreamer.getRtpDestPort();

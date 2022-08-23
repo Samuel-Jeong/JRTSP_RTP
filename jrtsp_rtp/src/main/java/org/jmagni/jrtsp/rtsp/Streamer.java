@@ -18,6 +18,13 @@ import org.jmagni.jrtsp.rtsp.base.RtpPacket;
 import org.jmagni.jrtsp.rtsp.netty.handler.StreamerChannelHandler;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.RtcpSenderReport;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.base.report.RtcpReportBlock;
+import org.jmagni.jrtsp.rtsp.stream.StreamInfo;
+import org.jmagni.jrtsp.rtsp.stream.UdpStream;
+import org.jmagni.jrtsp.rtsp.stream.network.LocalNetworkInfo;
+import org.jmagni.jrtsp.rtsp.stream.network.TargetNetworkInfo;
+import org.jmagni.jrtsp.rtsp.stream.rtp.AudioRtpMeta;
+import org.jmagni.jrtsp.rtsp.stream.rtp.RtcpInfo;
+import org.jmagni.jrtsp.rtsp.stream.rtp.VideoRtpMeta;
 import org.jmagni.jrtsp.service.AppInstance;
 
 import java.net.InetAddress;
@@ -31,119 +38,62 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.jmagni.jrtsp.rtsp.stream.StreamInfo.TCP_RTP_MAGIC_NUMBER;
+import static org.jmagni.jrtsp.rtsp.stream.rtp.RtcpInfo.RTCP_SR_LIMIT_COUNT;
+import static org.jmagni.jrtsp.rtsp.stream.rtp.base.RtpMeta.*;
+
 @Slf4j
 public class Streamer {
 
-    private final MediaType mediaType;
-    private final String callId;
-    private final String sessionId;
+    private final StreamInfo streamInfo;
 
-    private final boolean isTcp;
-    private String clientUserAgent = null;
+    private final LocalNetworkInfo localNetworkInfo;
 
-    private NioEventLoopGroup group = null;
-    private final Bootstrap b = new Bootstrap();
+    private final TargetNetworkInfo targetNetworkInfo;
 
-    private double startTime = 0.0d;
-    private double endTime = 0.0d;
+    private final AudioRtpMeta audioRtpMeta;
+    private final VideoRtpMeta videoRtpMeta;
 
-    private final String rtcpListenIp;
-    private final int rtcpListenPort;
-
-    private String uri = null;
-    private int congestionLevel = 0;
-
-    private Channel rtpDestChannel = null; /* 메시지 송신용 채널 */
-    InetSocketAddress rtpTargetAddress = null;
-    private Channel rtcpDestChannel = null; /* 메시지 송신용 채널 */
-    InetSocketAddress rtcpTargetAddress = null;
-
-    private String destIp = null;
-    private int rtpDestPort = 0; // rtp destination port
-    private int rtcpDestPort = 0; // rtcp destination port
-
-    private final String trackId;
-    public static final String TRACK_ID_TAG = "trackID";
-    public static final String AUDIO_TRACK_ID = "1";
-    private long audioSsrc;
-    private final AtomicInteger audioCurSeqNum = new AtomicInteger(0);
-    private final AtomicLong audioCurTimeStamp = new AtomicLong(0);
-
-    public static final String VIDEO_TRACK_ID = "2";
-    private long videoSsrc;
-    private final AtomicInteger videoCurSeqNum = new AtomicInteger(0);
-    private final AtomicLong videoCurTimeStamp = new AtomicLong(0);
+    private final RtcpInfo rtcpInfo = new RtcpInfo();
 
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
 
-    private final int RTCP_SR_LIMIT_COUNT = 5;
-    private int curRtcpSrCount = 5;
-    private int spc = 0;
 
-    private ChannelHandlerContext channelContext = null;
-
-    private DefaultFullHttpResponse playResponse = null;
-    private final ReentrantLock playResponseLock = new ReentrantLock();
-
-    private final byte TCP_RTP_MAGIC_NUMBER = 0X24;
-
-    public Streamer(MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp, String rtcpListenIp, int rtcpListenPort) {
-        this.mediaType = mediaType;
-        this.callId = callId;
-        this.sessionId = sessionId;
-        this.trackId = trackId;
-        this.isTcp = isTcp;
-        this.rtcpListenIp = rtcpListenIp;
-        this.rtcpListenPort = rtcpListenPort;
-
-        log.debug("({}) Streamer({}) is created. (callId={}, trackId={}, rtcpListenIp={}, rtcpListenPort={})",
-                sessionId, mediaType.getName(), callId, trackId, rtcpListenIp, rtcpListenPort
+    public Streamer(MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp, String listenIp, int listenPort) {
+        this.streamInfo = new StreamInfo(
+                mediaType, callId, sessionId, trackId
         );
-        log.warn("({}) Streamer's transport is [{}]", getKey(), isTcp? "TCP" : "UDP");
-    }
+        if (!isTcp) {
+            UdpStream udpStream = new UdpStream();
+            udpStream.start(getCallId());
+            streamInfo.setUdpStream(udpStream);
+        }
 
-    public Streamer init() {
-        UserConfig userConfig = AppInstance.getInstance().getConfigManager().getUserConfig();
-        group = new NioEventLoopGroup(userConfig.getStreamThreadPoolSize());
-        b.group(group).channel(NioDatagramChannel.class)
-                .option(ChannelOption.SO_BROADCAST, false)
-                .option(ChannelOption.SO_SNDBUF, userConfig.getSendBufSize())
-                .option(ChannelOption.SO_RCVBUF, userConfig.getRecvBufSize())
-                .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                .option(ChannelOption.SO_REUSEADDR, true)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000)
-                .handler(new ChannelInitializer<NioDatagramChannel>() {
-                    @Override
-                    public void initChannel (final NioDatagramChannel ch) {
-                        final ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(
-                                //new DefaultEventExecutorGroup(1),
-                                new StreamerChannelHandler(callId)
-                        );
-                    }
-                });
-        return this;
+        this.localNetworkInfo = new LocalNetworkInfo(listenIp, listenPort, isTcp);
+        this.targetNetworkInfo = new TargetNetworkInfo();
+
+        this.audioRtpMeta = new AudioRtpMeta();
+        this.videoRtpMeta = new VideoRtpMeta();
+
+        log.debug("({}) Streamer({}) is created. (callId={}, trackId={}, localNetworkInfo={})",
+                getKey(), mediaType.getName(), callId, trackId, localNetworkInfo
+        );
     }
 
     public void open() {
         try {
-            if (!isTcp) {
-                if (rtpDestPort > 0) {
-                    InetAddress address = InetAddress.getByName(destIp);
-                    ChannelFuture rtpChannelFuture = b.connect(address, rtpDestPort).sync();
-                    rtpDestChannel = rtpChannelFuture.channel();
-                    rtpTargetAddress = new InetSocketAddress(destIp, rtpDestPort);
+            UdpStream udpStream = streamInfo.getUdpStream();
+            if (udpStream != null) {
+                if (udpStream.connectTargetRtpEndpoint(targetNetworkInfo)) {
+                    log.debug("({}) Success to connect the UDP Rtp endpoint. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
 
-                    if (rtcpDestPort > 0) {
-                        ChannelFuture rtcpChannelFuture = b.connect(address, rtcpDestPort).sync();
-                        rtcpDestChannel = rtcpChannelFuture.channel();
-                        rtcpTargetAddress = new InetSocketAddress(destIp, rtcpDestPort);
+                    if (udpStream.connectTargetRtcpEndpoint(targetNetworkInfo)) {
+                        log.debug("({}) Success to connect the UDP Rtcp endpoint. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
+                    } else {
+                        log.warn("({}) Fail to connect the UDP Rtcp endpoint. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
                     }
-                    log.debug("({}) UDP Streamer is opened. (destIp={}, rtpDestPort={}, rtcpDestPort={})",
-                            getKey(), destIp, rtpDestPort, rtcpDestPort
-                    );
                 } else {
-                    log.warn("({}) UDP Streamer is not opened. (destIp={}, rtpDestPort={})", getKey(), destIp, rtpDestPort);
+                    log.warn("({}) Fail to connect the UDP Rtp endpoint. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
                 }
             }
         } catch (Exception e) {
@@ -152,11 +102,15 @@ public class Streamer {
     }
 
     public MediaType getMediaType() {
-        return mediaType;
+        return streamInfo.getMediaType();
     }
 
     public String getCallId() {
-        return callId;
+        return streamInfo.getCallId();
+    }
+
+    public String getSessionId() {
+        return streamInfo.getSessionId();
     }
 
     public boolean isStarted() {
@@ -168,24 +122,11 @@ public class Streamer {
     }
 
     public void close () {
-        closeRtpTarget();
-        closeRtcpTarget();
-    }
-
-    private void closeRtpTarget() {
-        if (rtpDestChannel != null) {
-            rtpDestChannel.closeFuture();
-            rtpDestChannel.close();
-            rtpDestChannel = null;
+        UdpStream udpStream = streamInfo.getUdpStream();
+        if (udpStream != null) {
+            udpStream.stop(targetNetworkInfo);
         }
-    }
-
-    private void closeRtcpTarget() {
-        if (rtcpDestChannel != null) {
-            rtcpDestChannel.closeFuture();
-            rtcpDestChannel.close();
-            rtcpDestChannel = null;
-        }
+        log.debug("({}) Streamer is finished.", getKey());
     }
 
     public void start() {
@@ -199,121 +140,96 @@ public class Streamer {
         //log.debug("({}) Streamer is stopped. ({})", getKey(), this);
     }
 
-    public void finish () {
-        stop();
-
-        if (group != null) {
-            group.shutdownGracefully();
-        }
-
-        log.debug("({}) Streamer is finished.", getKey());
-    }
-
-    public String getSessionId() {
-        return sessionId;
-    }
-
-    public String getRtcpListenIp() {
-        return rtcpListenIp;
-    }
-
-    public int getRtcpListenPort() {
-        return rtcpListenPort;
-    }
-
-    public Channel getRtpDestChannel() {
-        return rtpDestChannel;
-    }
-
     public String getDestIp() {
-        return destIp;
+        return targetNetworkInfo.getDestIp();
     }
 
     public int getRtpDestPort() {
-        return rtpDestPort;
+        return targetNetworkInfo.getRtpDestPort();
     }
 
     public int getRtcpDestPort() {
-        return rtcpDestPort;
+        return targetNetworkInfo.getRtcpDestPort();
     }
 
     public long getAudioSsrc() {
-        return audioSsrc;
+        return audioRtpMeta.getSsrc();
     }
 
     public void setAudioSsrc(long audioSsrc) {
-        this.audioSsrc = audioSsrc;
+        audioRtpMeta.setSsrc(audioSsrc);
     }
 
     public long getVideoSsrc() {
-        return videoSsrc;
+        return videoRtpMeta.getSsrc();
     }
 
     public void setVideoSsrc(long videoSsrc) {
-        this.videoSsrc = videoSsrc;
+        videoRtpMeta.setSsrc(videoSsrc);
     }
 
     public void setDestIp(String destIp) {
-        this.destIp = destIp;
+        targetNetworkInfo.setDestIp(destIp);
     }
 
     public void setRtpDestPort(int rtpDestPort) {
-        this.rtpDestPort = rtpDestPort;
+        targetNetworkInfo.setRtpDestPort(rtpDestPort);
     }
 
     public void setRtcpDestPort(int rtcpDestPort) {
-        this.rtcpDestPort = rtcpDestPort;
+        targetNetworkInfo.setRtcpDestPort(rtcpDestPort);
     }
 
     public void setVideoCurSeqNum(int videoCurSeqNum) {
-        this.videoCurSeqNum.set(videoCurSeqNum);
+        videoRtpMeta.setCurSeqNum(videoCurSeqNum);
     }
 
     public int getVideoCurSeqNum() {
-        return videoCurSeqNum.get();
+        return videoRtpMeta.getCurSeqNum();
     }
 
     public void setVideoCurTimeStamp(long videoCurTimeStamp) {
-        this.videoCurTimeStamp.set(videoCurTimeStamp);
+        videoRtpMeta.setCurTimeStamp(videoCurTimeStamp);
     }
 
     public long getVideoCurTimeStamp() {
-        return videoCurTimeStamp.get();
+        return videoRtpMeta.getCurTimeStamp();
     }
 
     public int getAudioCurSeqNum() {
-        return audioCurSeqNum.get();
+        return audioRtpMeta.getCurSeqNum();
     }
 
     public void setAudioCurSeqNum(int audioCurSeqNum) {
-        this.audioCurSeqNum.set(audioCurSeqNum);
+        audioRtpMeta.setCurSeqNum(audioCurSeqNum);
     }
 
     public long getAudioCurTimeStamp() {
-        return audioCurTimeStamp.get();
+        return audioRtpMeta.getCurTimeStamp();
     }
 
     public void setAudioCurTimeStamp(long audioCurTimeStamp) {
-        this.audioCurTimeStamp.set(audioCurTimeStamp);
+        audioRtpMeta.setCurTimeStamp(audioCurTimeStamp);
     }
 
     public String getClientUserAgent() {
-        return clientUserAgent;
+        return streamInfo.getClientUserAgent();
     }
 
     public void setClientUserAgent(String clientUserAgent) {
-        this.clientUserAgent = clientUserAgent;
+        streamInfo.setClientUserAgent(clientUserAgent);
     }
 
     public String getUri() {
-        return uri;
+        return targetNetworkInfo.getUri();
     }
 
     public void setUri(String uri) {
-        this.uri = uri;
+        targetNetworkInfo.setUri(uri);
     }
 
     public boolean isRtpDestActive() {
+        Channel rtpDestChannel = targetNetworkInfo.getRtpDestChannel();
         if (rtpDestChannel != null) {
             return rtpDestChannel.isActive() && rtpDestChannel.isOpen();
         } else {
@@ -322,6 +238,7 @@ public class Streamer {
     }
 
     public boolean isRtcpDestActive() {
+        Channel rtcpDestChannel = targetNetworkInfo.getRtcpDestChannel();
         if (rtcpDestChannel != null) {
             return rtcpDestChannel.isActive() && rtcpDestChannel.isOpen();
         } else {
@@ -329,32 +246,20 @@ public class Streamer {
         }
     }
 
-    public double getStartTime() {
-        return startTime;
-    }
-
-    public void setStartTime(double startTime) {
-        this.startTime = startTime;
-    }
-
-    public double getEndTime() {
-        return endTime;
-    }
-
-    public void setEndTime(double endTime) {
-        this.endTime = endTime;
-    }
-
-    public void setChannelContext(ChannelHandlerContext channelContext) {
-        this.channelContext = channelContext;
+    public void setRtspChannelContext(ChannelHandlerContext rtspChannelContext) {
+        streamInfo.setRtspChannelContext(rtspChannelContext);
     }
 
     public boolean isTcp() {
-        return isTcp;
+        return localNetworkInfo.isTcp();
     }
 
     public void sendPlayResponse() {
-        if (channelContext == null) {
+        ChannelHandlerContext rtspChannelContext = streamInfo.getRtspChannelContext();
+        DefaultFullHttpResponse playResponse = streamInfo.getPlayResponse();
+        ReentrantLock playResponseLock = streamInfo.getPlayResponseLock();
+
+        if (rtspChannelContext == null) {
             log.warn("({}) Fail to send the play response. Context is null.", getKey());
             return;
         } else if (playResponse == null) {
@@ -366,17 +271,16 @@ public class Streamer {
         try {
             playResponse.headers().add(
                     RtspHeaderNames.RTP_INFO,
-                    RtspHeaderValues.URL + "=" + uri + "/" + TRACK_ID_TAG + "=" + AUDIO_TRACK_ID
+                    RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + AUDIO_TRACK_ID
                             + ";" + RtspHeaderValues.SEQ + "=" + getAudioCurSeqNum()
                             + ";" + RtspHeaderValues.RTPTIME + "=" + getAudioCurTimeStamp() + "," +
-                            RtspHeaderValues.URL + "=" + uri + "/" + TRACK_ID_TAG + "=" + VIDEO_TRACK_ID
+                            RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + VIDEO_TRACK_ID
                             + ";" + RtspHeaderValues.SEQ + "=" + getVideoCurSeqNum()
                             + ";" + RtspHeaderValues.RTPTIME + "=" + getVideoCurTimeStamp()
             );
-            channelContext.writeAndFlush(playResponse);
+            rtspChannelContext.writeAndFlush(playResponse);
             log.debug("({}) [PLAY] > Success to send the response: {}\n", getKey(), playResponse);
-
-            playResponse = null;
+            streamInfo.setPlayResponse(null);
         } catch (Exception e) {
             // ignore
         } finally {
@@ -388,14 +292,15 @@ public class Streamer {
         if (isTcp()) {
             sendRtpPacketWithTcp(rtpPacket);
         } else {
-            if (this.mediaType.getName().equals(mediaType)) {
+            if (streamInfo.getMediaType().getName().equals(mediaType)) {
                 sendRtpPacketWithUdp(rtpPacket);
             }
         }
     }
 
     public void sendRtpPacketWithTcp(RtpPacket rtpPacket) {
-        if (channelContext == null) { return; }
+        ChannelHandlerContext rtspChannelContext = streamInfo.getRtspChannelContext();
+        if (rtspChannelContext == null) { return; }
 
         /**
          * The RTP data will be encapsulated in the following format:
@@ -412,7 +317,7 @@ public class Streamer {
 
         byte[] newRtpData = new byte[1 + 1 + 2 + rtpDataLength];
         newRtpData[0] = TCP_RTP_MAGIC_NUMBER;
-        newRtpData[1] = Byte.parseByte(trackId);
+        newRtpData[1] = Byte.parseByte(streamInfo.getTrackId());
 
         byte[] rtpDataLengthArray = ByteBuffer.allocate(2).putShort((short) rtpDataLength).array();
         newRtpData[2] = rtpDataLengthArray[0];
@@ -420,22 +325,22 @@ public class Streamer {
         System.arraycopy(rtpPacketRawData, 0, newRtpData, 4, rtpDataLength);
 
         ByteBuf rtpBuf = Unpooled.copiedBuffer(newRtpData);
-        channelContext.writeAndFlush(rtpBuf);
+        rtspChannelContext.writeAndFlush(rtpBuf);
     }
 
     public void sendRtpPacketWithUdp(RtpPacket rtpPacket) {
         try {
             ByteBuf rtpBuf = Unpooled.copiedBuffer(rtpPacket.getRawData());
             if (rtpBuf == null || rtpBuf.readableBytes() <= 0
-                    || destIp == null || rtpDestPort <= 0) {
+                    || targetNetworkInfo.getDestIp() == null || targetNetworkInfo.getRtpDestPort() <= 0) {
                 return;
             }
 
+            Channel rtpDestChannel = targetNetworkInfo.getRtpDestChannel();
             if (rtpDestChannel != null) {
                 ChannelFuture channelFuture = rtpDestChannel.writeAndFlush(rtpBuf);
                 if (channelFuture == null && !isRtpDestActive()) {
-                    log.warn("({}) Fail to send the message to rtp target. (ip={}, port={})", getKey(), destIp, rtpDestPort);
-                    closeRtpTarget();
+                    log.warn("({}) Fail to send the message to rtp target. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
                 } /*else {
                     log.debug("RtpPacket: ts={}, seq={}, ssrc={} / destIp={}, rtpDestPort={}",
                             rtpPacket.getTimestamp(), rtpPacket.getSeqNumber(), rtpPacket.getSyncSource(),
@@ -451,32 +356,39 @@ public class Streamer {
     }
 
     private void processRtcpPacket(RtpPacket rtpPacket) {
+        if (rtcpInfo == null) { return; }
+
+        Channel rtcpDestChannel = targetNetworkInfo.getRtcpDestChannel();
         if (rtcpDestChannel != null) {
+            int curRtcpSrCount = rtcpInfo.getCurRtcpSrCount();
             if (curRtcpSrCount < RTCP_SR_LIMIT_COUNT) {
-                curRtcpSrCount++;
-                spc += rtpPacket.getPayloadLength();
+                rtcpInfo.setCurRtcpSrCount(curRtcpSrCount + 1);
+                rtcpInfo.setSpc(rtcpInfo.getSpc() + rtpPacket.getPayloadLength());
                 return;
             }
 
             // RTCP SR
             RtcpSenderReport rtcpSenderReport = getRtcpSenderReport(rtpPacket);
+            if (rtcpSenderReport == null) { return; }
+
             ByteBuf rtcpBuf = Unpooled.copiedBuffer(rtcpSenderReport.getData());
-            if (rtcpBuf == null || rtcpBuf.readableBytes() <= 0 || destIp == null || rtcpDestPort <= 0) {
-                log.trace("({}) Fail to send the message. RtcpBuf is not defined. (ip={}, port={}, bytes={})",
-                        getKey(), destIp, rtcpDestPort, Objects.requireNonNull(rtcpBuf).readableBytes()
+            if (rtcpBuf == null || rtcpBuf.readableBytes() <= 0 || targetNetworkInfo.getDestIp() == null || targetNetworkInfo.getRtcpDestPort() <= 0) {
+                log.trace("({}) Fail to send the message. RtcpBuf is not defined. (targetNetworkInfo={}, bytes={})",
+                        getKey(), targetNetworkInfo, Objects.requireNonNull(rtcpBuf).readableBytes()
                 );
                 return;
             }
 
             ChannelFuture rtcpChannelFuture = rtcpDestChannel.writeAndFlush(rtcpBuf);
             if (rtcpChannelFuture == null && !isRtcpDestActive()) {
-                log.warn("({}) Fail to send the message to rtcp target. (ip={}, port={})", getKey(), destIp, rtcpDestPort);
-                closeRtcpTarget();
+                log.warn("({}) Fail to send the message to rtcp target. (targetNetworkInfo={})", getKey(), targetNetworkInfo);
             }
         }
     }
 
     private RtcpSenderReport getRtcpSenderReport(RtpPacket rtpPacket) {
+        if (rtcpInfo == null) { return null; }
+
         long curSeconds = TimeStamp.getCurrentTime().getSeconds();
         long curFraction = TimeStamp.getCurrentTime().getFraction();
         long rtpTimestamp = rtpPacket.getTimestamp();
@@ -494,33 +406,34 @@ public class Streamer {
         RtcpSenderReport rtcpSenderReport = new RtcpSenderReport(
                 curSeconds,
                 curFraction, rtpTimestamp,
-                curRtcpSrCount, spc,
+                rtcpInfo.getCurRtcpSrCount(), rtcpInfo.getSpc(),
                 rtcpReportBlockList,
                 null
         );
 
-        curRtcpSrCount = 0;
-        spc = 0;
+        rtcpInfo.setCurRtcpSrCount(0);
+        rtcpInfo.setSpc(0);
         log.debug("({}) RtcpSenderReport: \n{}", getKey(), rtcpSenderReport);
         return rtcpSenderReport;
     }
 
     public void setCongestionLevel(int congestionLevel) {
-        this.congestionLevel = congestionLevel;
+        rtcpInfo.setCongestionLevel(congestionLevel);
     }
 
     public int getCongestionLevel() {
-        return congestionLevel;
+        return rtcpInfo.getCongestionLevel();
     }
 
     public DefaultFullHttpResponse getPlayResponse() {
-        return playResponse;
+        return streamInfo.getPlayResponse();
     }
 
     public void setPlayResponse(DefaultFullHttpResponse playResponse) {
+        ReentrantLock playResponseLock = streamInfo.getPlayResponseLock();
         playResponseLock.lock();
         try {
-            this.playResponse = playResponse;
+            streamInfo.setPlayResponse(playResponse);
         } catch (Exception e) {
             // ignore
         } finally {
@@ -529,12 +442,12 @@ public class Streamer {
     }
 
     public String getTrackId() {
-        return trackId;
+        return streamInfo.getTrackId();
     }
 
     public String getKey() {
-        return (trackId != null && !trackId.isEmpty()) ?
-                callId + ":" + trackId : callId;
+        return (streamInfo.getTrackId() != null && !streamInfo.getTrackId().isEmpty()) ?
+                streamInfo.getCallId() + ":" + streamInfo.getTrackId() : streamInfo.getCallId();
     }
 
 }
