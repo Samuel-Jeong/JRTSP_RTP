@@ -1,21 +1,17 @@
 package org.jmagni.jrtsp.rtsp;
 
-import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.rtsp.RtspHeaderNames;
 import io.netty.handler.codec.rtsp.RtspHeaderValues;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.net.ntp.TimeStamp;
-import org.jmagni.jrtsp.config.UserConfig;
 import org.jmagni.jrtsp.rtsp.base.MediaType;
 import org.jmagni.jrtsp.rtsp.base.RtpPacket;
-import org.jmagni.jrtsp.rtsp.netty.handler.StreamerChannelHandler;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.RtcpSenderReport;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.base.report.RtcpReportBlock;
 import org.jmagni.jrtsp.rtsp.stream.StreamInfo;
@@ -25,17 +21,12 @@ import org.jmagni.jrtsp.rtsp.stream.network.TargetNetworkInfo;
 import org.jmagni.jrtsp.rtsp.stream.rtp.AudioRtpMeta;
 import org.jmagni.jrtsp.rtsp.stream.rtp.RtcpInfo;
 import org.jmagni.jrtsp.rtsp.stream.rtp.VideoRtpMeta;
-import org.jmagni.jrtsp.service.AppInstance;
 
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.jmagni.jrtsp.rtsp.stream.StreamInfo.TCP_RTP_MAGIC_NUMBER;
@@ -271,12 +262,7 @@ public class Streamer {
         try {
             playResponse.headers().add(
                     RtspHeaderNames.RTP_INFO,
-                    RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + AUDIO_TRACK_ID
-                            + ";" + RtspHeaderValues.SEQ + "=" + getAudioCurSeqNum()
-                            + ";" + RtspHeaderValues.RTPTIME + "=" + getAudioCurTimeStamp() + "," +
-                            RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + VIDEO_TRACK_ID
-                            + ";" + RtspHeaderValues.SEQ + "=" + getVideoCurSeqNum()
-                            + ";" + RtspHeaderValues.RTPTIME + "=" + getVideoCurTimeStamp()
+                    makeRtpInfoData()
             );
             rtspChannelContext.writeAndFlush(playResponse);
             log.debug("({}) [PLAY] > Success to send the response: {}\n", getKey(), playResponse);
@@ -286,6 +272,15 @@ public class Streamer {
         } finally {
             playResponseLock.unlock();
         }
+    }
+
+    private String makeRtpInfoData() {
+        return RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + AUDIO_TRACK_ID
+                + ";" + RtspHeaderValues.SEQ + "=" + getAudioCurSeqNum()
+                + ";" + RtspHeaderValues.RTPTIME + "=" + getAudioCurTimeStamp() + "," +
+                RtspHeaderValues.URL + "=" + targetNetworkInfo.getUri() + "/" + TRACK_ID_TAG + "=" + VIDEO_TRACK_ID
+                + ";" + RtspHeaderValues.SEQ + "=" + getVideoCurSeqNum()
+                + ";" + RtspHeaderValues.RTPTIME + "=" + getVideoCurTimeStamp();
     }
 
     public void sendRtpPacket(RtpPacket rtpPacket, String mediaType) {
@@ -302,6 +297,11 @@ public class Streamer {
         ChannelHandlerContext rtspChannelContext = streamInfo.getRtspChannelContext();
         if (rtspChannelContext == null) { return; }
 
+        ByteBuf rtpBuf = Unpooled.copiedBuffer(makeTcpRtpData(rtpPacket));
+        rtspChannelContext.writeAndFlush(rtpBuf);
+    }
+
+    private byte[] makeTcpRtpData(RtpPacket rtpPacket) {
         /**
          * The RTP data will be encapsulated in the following format:
          *    | magic number | channel number | Embedded data length | data |
@@ -323,9 +323,7 @@ public class Streamer {
         newRtpData[2] = rtpDataLengthArray[0];
         newRtpData[3] = rtpDataLengthArray[1];
         System.arraycopy(rtpPacketRawData, 0, newRtpData, 4, rtpDataLength);
-
-        ByteBuf rtpBuf = Unpooled.copiedBuffer(newRtpData);
-        rtspChannelContext.writeAndFlush(rtpBuf);
+        return newRtpData;
     }
 
     public void sendRtpPacketWithUdp(RtpPacket rtpPacket) {

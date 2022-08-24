@@ -27,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Random;
 
-import static org.jmagni.jrtsp.rtsp.Streamer.*;
 import static org.jmagni.jrtsp.rtsp.stream.rtp.base.RtpMeta.*;
 
 /**

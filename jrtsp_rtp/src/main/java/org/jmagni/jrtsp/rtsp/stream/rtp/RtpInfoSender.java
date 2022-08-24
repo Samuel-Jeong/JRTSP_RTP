@@ -40,16 +40,7 @@ public class RtpInfoSender extends Thread {
         if (streamerList == null || streamerList.isEmpty()) { return; }
 
         for (Streamer streamer : streamerList) {
-            if (rtpInfo.getMediaType().equals(MediaType.AUDIO.getName())) {
-                streamer.setAudioSsrc(rtpInfo.getRtpPacket().getSyncSource());
-                streamer.setAudioCurSeqNum(rtpInfo.getRtpPacket().getSeqNumber());
-                streamer.setAudioCurTimeStamp(rtpInfo.getRtpPacket().getTimestamp());
-            } else if (rtpInfo.getMediaType().equals(MediaType.VIDEO.getName())) {
-                streamer.setVideoSsrc(rtpInfo.getRtpPacket().getSyncSource());
-                streamer.setVideoCurSeqNum(rtpInfo.getRtpPacket().getSeqNumber());
-                streamer.setVideoCurTimeStamp(rtpInfo.getRtpPacket().getTimestamp());
-            }
-
+            applyRtpMetaToStreamer(rtpInfo, streamer);
             // CALLBACK
             if (streamer.getPlayResponse() != null) {
                 streamer.sendPlayResponse();
@@ -58,6 +49,18 @@ public class RtpInfoSender extends Thread {
             if (streamer.isStarted()) {
                 streamer.sendRtpPacket(rtpInfo.getRtpPacket(), rtpInfo.getMediaType());
             }
+        }
+    }
+
+    private void applyRtpMetaToStreamer(RtpInfo rtpInfo, Streamer streamer) {
+        if (rtpInfo.getMediaType().equals(MediaType.AUDIO.getName())) {
+            streamer.setAudioSsrc(rtpInfo.getRtpPacket().getSyncSource());
+            streamer.setAudioCurSeqNum(rtpInfo.getRtpPacket().getSeqNumber());
+            streamer.setAudioCurTimeStamp(rtpInfo.getRtpPacket().getTimestamp());
+        } else if (rtpInfo.getMediaType().equals(MediaType.VIDEO.getName())) {
+            streamer.setVideoSsrc(rtpInfo.getRtpPacket().getSyncSource());
+            streamer.setVideoCurSeqNum(rtpInfo.getRtpPacket().getSeqNumber());
+            streamer.setVideoCurTimeStamp(rtpInfo.getRtpPacket().getTimestamp());
         }
     }
 
