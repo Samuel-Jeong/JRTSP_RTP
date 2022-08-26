@@ -14,6 +14,7 @@ import org.jmagni.jrtsp.rtsp.base.MediaType;
 import org.jmagni.jrtsp.rtsp.base.RtpPacket;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.RtcpSenderReport;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.base.report.RtcpReportBlock;
+import org.jmagni.jrtsp.rtsp.statistics.RtpStatistics;
 import org.jmagni.jrtsp.rtsp.stream.StreamInfo;
 import org.jmagni.jrtsp.rtsp.stream.UdpStream;
 import org.jmagni.jrtsp.rtsp.stream.network.LocalNetworkInfo;
@@ -49,6 +50,7 @@ public class Streamer {
 
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
 
+    private final RtpStatistics rtpStatistics = new RtpStatistics();
 
     public Streamer(MediaType mediaType, String callId, String sessionId, String trackId, boolean isTcp, String listenIp, int listenPort) {
         this.streamInfo = new StreamInfo(
@@ -121,11 +123,15 @@ public class Streamer {
     }
 
     public void start() {
+        rtpStatistics.start();
+
         isStarted.set(true);
         //log.debug("({}) Streamer is started. ({})", getKey(), this);
     }
 
     public void stop () {
+        rtpStatistics.stop();
+
         close();
         isStarted.set(false);
         //log.debug("({}) Streamer is stopped. ({})", getKey(), this);
@@ -291,6 +297,7 @@ public class Streamer {
                 sendRtpPacketWithUdp(rtpPacket);
             }
         }
+        rtpStatistics.calculate(rtpPacket.getRawData().length);
     }
 
     public void sendRtpPacketWithTcp(RtpPacket rtpPacket) {
