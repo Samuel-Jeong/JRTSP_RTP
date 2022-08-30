@@ -61,7 +61,7 @@ public class RtcpNettyChannel { // > UDP
                     protected void initChannel(NioDatagramChannel socketChannel) {
                         final ChannelPipeline pipeline = socketChannel.pipeline();
                         pipeline.addLast(
-                                new RtcpChannelHandler(ip, port)
+                                new RtcpChannelHandler(streamerKey, ip, port)
                         );
                     }
                 });

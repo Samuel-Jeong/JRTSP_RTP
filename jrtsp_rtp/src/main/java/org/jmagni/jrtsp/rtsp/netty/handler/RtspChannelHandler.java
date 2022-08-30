@@ -358,9 +358,14 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
     private void setupUdp(ChannelHandlerContext ctx, DefaultHttpRequest req, DefaultFullHttpResponse res, String transportHeaderContent, Streamer streamer) {
         if (getTransportInfo(ctx, req, res, transportHeaderContent, streamer)) { return; }
 
+        // Listen RTCP?
+        int rtcpDestPort = streamer.getRtcpDestPort();
+        NettyChannelManager.getInstance().openRtcpChannel(streamer.getKey(), streamer.getListenIp(), rtcpDestPort);
+
         res.headers().add(
                 RtspHeaderNames.TRANSPORT,
                 transportHeaderContent
+                // > Server listen rtcp port 설정안하면 client port 로 client 에서 rtcp packet 송신
                 //+ ";server_port=" + listenRtspPort + "-" + rtspUnit.getRtcpListenPort()
                 //+ ";ssrc=" + (isAudioReq? streamer.getAudioSsrc() : streamer.getVideoSsrc())
         );

@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.net.ntp.TimeStamp;
 import org.jmagni.jrtsp.rtsp.base.MediaType;
 import org.jmagni.jrtsp.rtsp.base.RtpPacket;
+import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.RtcpSenderReport;
 import org.jmagni.jrtsp.rtsp.rtcp.type.regular.base.report.RtcpReportBlock;
 import org.jmagni.jrtsp.rtsp.statistics.RtpStatistics;
@@ -132,6 +133,8 @@ public class Streamer {
     public void stop () {
         rtpStatistics.stop();
 
+        NettyChannelManager.getInstance().deleteRtcpChannel(getKey());
+
         close();
         isStarted.set(false);
         //log.debug("({}) Streamer is stopped. ({})", getKey(), this);
@@ -245,6 +248,10 @@ public class Streamer {
 
     public void setRtspChannelContext(ChannelHandlerContext rtspChannelContext) {
         streamInfo.setRtspChannelContext(rtspChannelContext);
+    }
+
+    public String getListenIp() {
+        return localNetworkInfo.getListenIp();
     }
 
     public boolean isTcp() {

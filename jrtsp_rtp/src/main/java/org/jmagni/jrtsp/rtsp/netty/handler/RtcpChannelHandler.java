@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramPacket;
+import lombok.extern.slf4j.Slf4j;
 import org.jmagni.jrtsp.rtsp.Streamer;
 import org.jmagni.jrtsp.rtsp.base.ByteUtil;
 import org.jmagni.jrtsp.rtsp.netty.NettyChannelManager;
@@ -18,24 +19,27 @@ import org.slf4j.LoggerFactory;
 /**
  * @class public class RtcpChannelHandler extends SimpleChannelInboundHandler<DatagramPacket>
  */
+
+@Slf4j
 public class RtcpChannelHandler extends SimpleChannelInboundHandler<DatagramPacket> {
 
-    private static final Logger logger = LoggerFactory.getLogger(RtcpChannelHandler.class);
-
+    private final String streamerKey;
     private final String name;
     private final String listenIp;
     private final int listenPort;
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    public RtcpChannelHandler(String listenIp, int listenPort) {
+    public RtcpChannelHandler(String streamerKey, String listenIp, int listenPort) {
+        this.streamerKey = streamerKey;
         this.name = "RTCP_" + listenIp + ":" + listenPort;
 
         this.listenIp = listenIp;
         this.listenPort = listenPort;
 
-        logger.debug("({}) RtcpChannelHandler is created. (listenIp={}, listenPort={})", name, listenIp, listenPort);
+        log.debug("[{}] ({}) RtcpChannelHandler is created. (listenIp={}, listenPort={})", streamerKey, name, listenIp, listenPort);
     }
+
 
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -55,11 +59,11 @@ public class RtcpChannelHandler extends SimpleChannelInboundHandler<DatagramPack
             byte[] data = new byte[readBytes];
             buf.getBytes(0, data);
 
-            logger.debug("({}) data: [{}], readBytes: [{}]", name, ByteUtil.byteArrayToHex(data), readBytes);
+            //log.debug("({}) data: [{}], readBytes: [{}]", name, ByteUtil.byteArrayToHex(data), readBytes);
 
             if (data.length >= RtcpHeader.LENGTH) {
                 RtcpPacket rtcpPacket = new RtcpPacket(data);
-                logger.debug("({}) {}", name, rtcpPacket);
+                log.debug("[{}] ({}) {}", streamerKey, name, rtcpPacket);
 
                 int packetType = rtcpPacket.getRtcpHeader().getPacketType();
                 switch (packetType) {
@@ -83,7 +87,7 @@ public class RtcpChannelHandler extends SimpleChannelInboundHandler<DatagramPack
                 }
             }
         } catch (Exception e) {
-            logger.warn("| ({}) Fail to handle the rtcp Packet.", name, e);
+            log.warn("[{}] ({}) Fail to handle the rtcp Packet.", streamerKey, name, e);
         }
     }
 
