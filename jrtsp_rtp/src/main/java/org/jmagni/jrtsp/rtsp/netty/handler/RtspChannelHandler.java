@@ -340,7 +340,7 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
     private Streamer addStreamer(String callId, String curSessionId, String trackId, boolean isTcp) {
         // setup 요청 시마다 기존 streamer 삭제하고 새로운 streamer 생성
         Streamer streamer = NettyChannelManager.getInstance().getStreamer(
-                getStreamerKey(callId, trackId)
+                getStreamerKey(callId, trackId, curSessionId)
         );
         if (streamer != null) {
             NettyChannelManager.getInstance().deleteStreamer(streamer);
@@ -762,11 +762,11 @@ public class RtspChannelHandler extends ChannelInboundHandlerAdapter {
         logger.warn("({}) RtspChannelHandler.Exception (cause={})", name, cause.toString());
     }
 
-    private String getStreamerKey(String callId, String trackId) {
+    private String getStreamerKey(String callId, String trackId, String sessionId) {
         if (trackId != null && !trackId.isEmpty()) {
-            return callId + ":" + trackId;
+            return callId + ":" + trackId + ":" + sessionId;
         }
-        return callId;
+        return callId + ":" + sessionId;
     }
 
 }

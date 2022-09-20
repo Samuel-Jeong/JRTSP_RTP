@@ -155,7 +155,7 @@ public class RtspNettyChannel { // > TCP
         try {
             streamerMapLock.lock();
 
-            String key = (trackId != null && !trackId.isEmpty()) ? callId + ":" + trackId : callId;
+            String key = (trackId != null && !trackId.isEmpty()) ? callId + ":" + trackId + ":" + sessionId : callId + ":" + sessionId;
             if (streamerMap.get(key) != null) {
                 logger.warn("Streamer is already exist. (key={})", sessionId);
                 return null;

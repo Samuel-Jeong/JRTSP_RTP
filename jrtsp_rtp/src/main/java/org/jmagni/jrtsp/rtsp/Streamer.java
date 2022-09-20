@@ -459,7 +459,8 @@ public class Streamer {
 
     public String getKey() {
         return (streamInfo.getTrackId() != null && !streamInfo.getTrackId().isEmpty()) ?
-                streamInfo.getCallId() + ":" + streamInfo.getTrackId() : streamInfo.getCallId();
+                streamInfo.getCallId() + ":" + streamInfo.getTrackId() + ":" + streamInfo.getSessionId()
+                : streamInfo.getCallId() + ":" + streamInfo.getSessionId();
     }
 
 }
