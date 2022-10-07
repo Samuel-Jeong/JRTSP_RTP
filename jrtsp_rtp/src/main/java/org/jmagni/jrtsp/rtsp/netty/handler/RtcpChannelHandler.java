@@ -63,7 +63,9 @@ public class RtcpChannelHandler extends SimpleChannelInboundHandler<DatagramPack
 
             if (data.length >= RtcpHeader.LENGTH) {
                 RtcpPacket rtcpPacket = new RtcpPacket(data);
-                log.debug("[{}] ({}) {}", streamerKey, name, rtcpPacket);
+                if (log.isTraceEnabled()) {
+                    log.trace("[{}] ({}) {}", streamerKey, name, rtcpPacket);
+                }
 
                 int packetType = rtcpPacket.getRtcpHeader().getPacketType();
                 switch (packetType) {

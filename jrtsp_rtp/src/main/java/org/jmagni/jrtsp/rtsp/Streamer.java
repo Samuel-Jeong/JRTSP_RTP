@@ -22,12 +22,15 @@ import org.jmagni.jrtsp.rtsp.stream.network.LocalNetworkInfo;
 import org.jmagni.jrtsp.rtsp.stream.network.TargetNetworkInfo;
 import org.jmagni.jrtsp.rtsp.stream.rtp.AudioRtpMeta;
 import org.jmagni.jrtsp.rtsp.stream.rtp.RtcpInfo;
+import org.jmagni.jrtsp.rtsp.stream.rtp.RtpDto;
 import org.jmagni.jrtsp.rtsp.stream.rtp.VideoRtpMeta;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -37,6 +40,11 @@ import static org.jmagni.jrtsp.rtsp.stream.rtp.base.RtpMeta.*;
 
 @Slf4j
 public class Streamer {
+
+    private static final int RTP_BURST_BUFFER_COUNT = 50;
+
+    private boolean isRtpBurstDone = false;
+    private Queue<RtpDto> rtpBurstBuffer;
 
     private final StreamInfo streamInfo;
 
@@ -132,6 +140,11 @@ public class Streamer {
 
     public void stop () {
         rtpStatistics.stop();
+
+        if (rtpBurstBuffer != null) {
+            rtpBurstBuffer.clear();
+            rtpBurstBuffer = null;
+        }
 
         NettyChannelManager.getInstance().deleteRtcpChannel(getKey());
 
@@ -297,6 +310,34 @@ public class Streamer {
     }
 
     public void sendRtpPacket(RtpPacket rtpPacket, String mediaType) {
+        if (burstRtp(rtpPacket, mediaType)) { return; }
+
+        send(rtpPacket, mediaType);
+    }
+
+    private boolean burstRtp(RtpPacket rtpPacket, String mediaType) {
+        if (!isRtpBurstDone) {
+            if (rtpBurstBuffer == null) {
+                rtpBurstBuffer = new ConcurrentLinkedQueue<>();
+            }
+
+            rtpBurstBuffer.offer(new RtpDto(rtpPacket, mediaType));
+            if (rtpBurstBuffer.size() == RTP_BURST_BUFFER_COUNT) {
+                while (!rtpBurstBuffer.isEmpty()) {
+                    RtpDto rtpDto = rtpBurstBuffer.poll();
+                    if (rtpDto == null) { continue; }
+                    send(rtpDto.getRtpPacket(), rtpDto.getMediaType());
+                }
+                rtpBurstBuffer = null;
+                isRtpBurstDone = true;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void send(RtpPacket rtpPacket, String mediaType) {
         if (isTcp()) {
             sendRtpPacketWithTcp(rtpPacket);
         } else {
@@ -368,8 +409,6 @@ public class Streamer {
     }
 
     private void processRtcpPacket(RtpPacket rtpPacket) {
-        if (rtcpInfo == null) { return; }
-
         Channel rtcpDestChannel = targetNetworkInfo.getRtcpDestChannel();
         if (rtcpDestChannel != null) {
             int curRtcpSrCount = rtcpInfo.getCurRtcpSrCount();
@@ -399,8 +438,6 @@ public class Streamer {
     }
 
     private RtcpSenderReport getRtcpSenderReport(RtpPacket rtpPacket) {
-        if (rtcpInfo == null) { return null; }
-
         long curSeconds = TimeStamp.getCurrentTime().getSeconds();
         long curFraction = TimeStamp.getCurrentTime().getFraction();
         long rtpTimestamp = rtpPacket.getTimestamp();
